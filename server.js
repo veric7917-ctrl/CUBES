@@ -2,14 +2,15 @@ import http from 'node:http';
 import { randomBytes, randomInt } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { CUBE_SETS } from './public/levels.js';
 
 const token = () => randomBytes(24).toString('hex');
 export function createApp() {
   const rooms = new Map();
   const publicStudent = s => ({ id: s.id, name: s.name, positions: s.positions, revision: s.revision, finished: s.finished, online: s.streams.size > 0 });
   const snapshot = (room, member) => member === room.teacher
-    ? { role: 'teacher', code: room.code, round: room.round, students: [...room.students.values()].map(publicStudent) }
-    : { role: 'student', code: room.code, round: room.round, student: publicStudent(member),
+    ? { role: 'teacher', code: room.code, level: room.level, round: room.round, students: [...room.students.values()].map(publicStudent) }
+    : { role: 'student', code: room.code, level: room.level, round: room.round, student: publicStudent(member),
       ...(room.students.size === 2 && [...room.students.values()].every(s => s.finished)
         ? { students: [...room.students.values()].map(publicStudent) } : {}) };
   const send = (room, member) => {
@@ -32,13 +33,15 @@ export function createApp() {
         if (req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) fail(403, 'Origin not allowed.');
         const data = await body(req);
         if (url.pathname === '/api/rooms') {
+          const level = data.level === undefined ? 1 : data.level;
+          if (!Number.isInteger(level) || !Object.hasOwn(CUBE_SETS, level)) fail(400, 'Choose Level 1, Level 2, Level 3 or Level 4.');
           if (rooms.size >= 500) fail(503, 'Please try again later.');
           let code;
           const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
           do { code = Array.from({ length: 5 }, () => alphabet[randomInt(alphabet.length)]).join(''); } while (rooms.has(code));
           const teacher = { token: token(), streams: new Set() };
-          rooms.set(code, { code, teacher, round: 1, students: new Map(), touched: Date.now() });
-          return json(201, { code, token: teacher.token, role: 'teacher' });
+          rooms.set(code, { code, level, teacher, round: 1, students: new Map(), touched: Date.now() });
+          return json(201, { code, level, token: teacher.token, role: 'teacher' });
         }
         const room = rooms.get(String(data.code || '').trim().toUpperCase());
         if (!room) fail(404, 'Room not found. Check the code with your teacher.');
@@ -47,10 +50,10 @@ export function createApp() {
           const name = typeof data.name === 'string' ? data.name.trim() : '';
           if (!name || name.length > 30) fail(400, 'Enter your name (up to 30 characters).');
           if (room.students.size >= 2) fail(409, 'Both student places are taken.');
-          const student = { id: token(), token: token(), name, positions: [0, 0, 0, 0], revision: 0, finished: false, streams: new Set() };
+          const student = { id: token(), token: token(), name, positions: CUBE_SETS[room.level].map(() => 0), revision: 0, finished: false, streams: new Set() };
           room.students.set(student.id, student);
           broadcast(room);
-          return json(201, { code: room.code, token: student.token, role: 'student' });
+          return json(201, { code: room.code, level: room.level, token: student.token, role: 'student' });
         }
         if (url.pathname === '/api/new-round') {
           if (data.token !== room.teacher.token) fail(403, 'Only the teacher can start a new round.');
@@ -68,7 +71,7 @@ export function createApp() {
             if (url.pathname === '/api/bell') return json(200, publicStudent(student));
             fail(409, 'These cubes are locked until the teacher starts a new round.');
           }
-          if (!Array.isArray(data.positions) || data.positions.length !== 4 || !data.positions.every(n => Number.isInteger(n) && n >= 0 && n < 4) || !Number.isSafeInteger(data.revision) || data.revision < 1) fail(400, 'Invalid cube positions.');
+          if (!Array.isArray(data.positions) || data.positions.length !== CUBE_SETS[room.level].length || !data.positions.every((n, index) => Number.isInteger(n) && n >= 0 && n < CUBE_SETS[room.level][index].length) || !Number.isSafeInteger(data.revision) || data.revision < 1) fail(400, 'Invalid cube positions.');
           if (data.revision > student.revision) {
             student.positions = data.positions;
             student.revision = data.revision;
@@ -95,7 +98,7 @@ export function createApp() {
         res.on('close', () => { clearInterval(heartbeat); member.streams.delete(res); if (member !== room.teacher) send(room, room.teacher); });
         return;
       }
-      const files = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
+      const files = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/levels.js': ['levels.js', 'text/javascript'], '/styles.css': ['styles.css', 'text/css'] };
       if (req.method !== 'GET' || !files[url.pathname]) fail(404, 'Not found.');
       const [file, type] = files[url.pathname];
       const contents = await readFile(new URL(`./public/${file}`, import.meta.url));
