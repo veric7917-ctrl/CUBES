@@ -45,6 +45,16 @@ try {
     assert.equal(await page.locator('#student-name').textContent(), name);
     assert.equal(await page.locator('.level').textContent(), badge);
     assert.equal(await page.getByRole('radio').count(), 0);
+    if (level === 1 && page === anna) {
+      // Complete a solo round before the second student joins.
+      await page.locator('#bell').click();
+      await teacher.locator('.student-card').first().getByText('🔔 Finished · Locked').waitFor();
+      assert.equal(await page.locator('#my-cubes button:disabled').count(), 4);
+      assert.equal(await page.locator('#partner-question').isVisible(), false);
+      await teacher.getByRole('button', { name: 'NEW ROUND' }).click();
+      await page.locator('#my-cubes button:enabled').first().waitFor();
+      assert.equal(await page.locator('#bell').isEnabled(), true);
+    }
     const expectedFaces = CUBE_SETS[level];
     for (let i = 0; i < 4; i++) {
       const faces = expectedFaces[i];
@@ -67,12 +77,13 @@ try {
       assert.equal(await page.locator('#my-cubes button').nth(1).getAttribute('aria-label'), `Auxiliary: ${expectedFaces[1][i % count]}. Rotate cube`);
       await expectVisibleFaces(page, expectedFaces[1][i % count], expectedFaces[1][(i + 1) % count]);
     }
-    if (level >= 2) {
+    if (level >= 1) {
       const verbs = expectedFaces[3];
       for (let i = 1; i <= verbs.length * 2; i++) {
         await page.locator('#my-cubes button').nth(3).click();
         assert.equal(await page.locator('#my-cubes button').nth(3).getAttribute('aria-label'), 'Verb: ' + verbs[i % verbs.length] + '. Rotate cube');
         await expectVisibleFaces(page, verbs[i % verbs.length], verbs[(i + 1) % verbs.length], '#my-cubes .cube-wrap:nth-child(4) .cube');
+        if (level === 1) assert.equal(await page.locator('#my-cubes .cube-wrap:nth-child(4) .face').evaluateAll(faces => faces.every(face => face.scrollWidth <= face.clientWidth)), true, 'Routine phrases fit the cube faces');
         const cardIndex = page === anna ? 1 : 2;
         await expectVisibleFaces(teacher, verbs[i % verbs.length], verbs[(i + 1) % verbs.length], '.student-card:nth-child(' + cardIndex + ') .cube-wrap:nth-child(4) .cube');
       }
@@ -106,7 +117,7 @@ try {
   }
   assert.equal(await annaCard.locator('.cube-control').nth(2).getAttribute('aria-label'), 'Subject: SHE');
   assert.equal(await max.locator('.cube-control').nth(0).getAttribute('aria-label'), 'Question word: ' + CUBE_SETS[level][0][0] + '. Rotate cube');
-  for (let i = 0; i < 12; i++) await anna.locator('.cube-control').nth(0).click();
+  for (let i = 0; i < CUBE_SETS[level][0].length * 3; i++) await anna.locator('.cube-control').nth(0).click();
   assert.equal(await anna.locator('.cube-control').nth(0).getAttribute('aria-label'), 'Question word: ' + CUBE_SETS[level][0][1 % CUBE_SETS[level][0].length] + '. Rotate cube');
   await anna.reload({ waitUntil: 'domcontentloaded' });
   await anna.getByRole('button', { name: 'Subject: SHE. Rotate cube' }).waitFor();

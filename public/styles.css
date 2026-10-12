@@ -23,6 +23,8 @@
 .comparing .student-heading{margin:15px 0 35px}
 @media(max-width:740px){.comparing #student-area{grid-template-columns:1fr}.comparing .cube-row{--size:clamp(55px,15vw,105px)}.student-heading h1,.student-heading h2{font-size:23px}}
 
+/* Level 1: fit routine phrases on the existing cube faces. */
+[data-level="1"] .color-0 .face,[data-level="1"] .color-3 .face{font-size:calc(var(--size) * .11);letter-spacing:0;padding:2px;overflow-wrap:normal}
 /* Level 4 only: retain the cube geometry and palette, fitting five positions. */
 .cube-row.five-cubes{grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;container-type:inline-size;--who-limit:125px}
 .five-cubes .cube-wrap{--size:min(var(--who-limit),calc((100cqw - 64px)/6))}
